@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>SentiScan — AI Sentiment Analysis</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#050508;
+  --surface:rgba(255,255,255,0.04);
+  --surface2:rgba(255,255,255,0.07);
+  --border:rgba(255,255,255,0.08);
+  --border2:rgba(255,255,255,0.15);
+  --text:#f0eff6;
+  --text2:#8b89a0;
+  --text3:#4a4860;
+  --pos:#00f5a0;
+  --neu:#8b89a0;
+  --neg:#ff4d6d;
+  --claude:#9b87f5;
+  --gemini:#4285f4;
+  --glow-pos:rgba(0,245,160,0.3);
+  --glow-neg:rgba(255,77,109,0.3);
+  --glow-neu:rgba(139,137,160,0.2);
+}
+
+html{scroll-behavior:smooth}
+
+body{
+  font-family:'Inter',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* ── CANVAS BACKGROUND ── */
+#bgCanvas{
+  position:fixed;inset:0;z-index:0;
+  pointer-events:none;
+}
+
+/* ── LAYOUT ── */
+.page{
+  position:relative;z-index:1;
+  max-width:740px;
+  margin:0 auto;
+  padding:2rem 1.5rem 6rem;
+}
+
+/* ── HERO HEADER ── */
+.hero{
+  text-align:center;
+  padding:3rem 0 2.5rem;
+  position:relative;
+}
+
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;letter-spacing:2px;
+  color:var(--claude);
+  text-transform:uppercase;
+  background:rgba(155,135,245,0.08);
+  border:1px solid rgba(155,135,245,0.2);
+  padding:6px 16px;border-radius:40px;
+  margin-bottom:1.5rem;
+}
+
+.pulse-ring{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--claude);
+  position:relative;
+}
+.pulse-ring::after{
+  content:'';position:absolute;inset:-4px;
+  border-radius:50%;border:2px solid var(--claude);
+  animation:ringPulse 2s infinite;
+}
+@keyframes ringPulse{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(2.5)}}
+
+.hero h1{
+  font-family:'Syne',sans-serif;
+  font-size:clamp(3rem,8vw,5.5rem);
+  font-weight:800;
+  letter-spacing:-3px;
+  line-height:0.9;
+  background:linear-gradient(135deg,#fff 0%,#9b87f5 50%,#4285f4 100%);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  margin-bottom:1rem;
+}
+
+.hero-sub{
+  font-size:16px;color:var(--text2);
+  max-width:400px;margin:0 auto 2rem;
+  line-height:1.6;font-weight:300;
+}
+
+/* emotion orbs floating */
+.orbs{
+  display:flex;justify-content:center;gap:16px;
+  margin-bottom:2.5rem;
+  flex-wrap:wrap;
+}
+
+.orb{
+  width:64px;height:64px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:26px;
+  position:relative;
+  cursor:default;
+  animation:float 4s ease-in-out infinite;
+}
+.orb:nth-child(2){animation-delay:.6s}
+.orb:nth-child(3){animation-delay:1.2s}
+.orb:nth-child(4){animation-delay:1.8s}
+.orb:nth-child(5){animation-delay:2.4s}
+
+.orb.happy{background:rgba(0,245,160,0.12);border:1px solid rgba(0,245,160,0.3);box-shadow:0 0 30px rgba(0,245,160,0.15)}
+.orb.sad{background:rgba(255,77,109,0.12);border:1px solid rgba(255,77,109,0.3);box-shadow:0 0 30px rgba(255,77,109,0.15)}
+.orb.angry{background:rgba(255,120,50,0.12);border:1px solid rgba(255,120,50,0.3);box-shadow:0 0 30px rgba(255,120,50,0.15)}
+.orb.calm{background:rgba(66,133,244,0.12);border:1px solid rgba(66,133,244,0.3);box-shadow:0 0 30px rgba(66,133,244,0.15)}
+.orb.surprised{background:rgba(155,135,245,0.12);border:1px solid rgba(155,135,245,0.3);box-shadow:0 0 30px rgba(155,135,245,0.15)}
+
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+
+/* ── MODEL SWITCHER ── */
+.model-switcher{
+  display:flex;
+  background:rgba(255,255,255,0.03);
+  border:1px solid var(--border2);
+  border-radius:16px;
+  padding:5px;
+  gap:4px;
+  margin-bottom:1.5rem;
+  position:relative;
+}
+
+.model-pill{
+  flex:1;
+  padding:10px 12px;
+  border-radius:12px;
+  border:none;
+  background:transparent;
+  color:var(--text3);
+  font-family:'Inter',sans-serif;
+  font-size:13px;font-weight:500;
+  cursor:pointer;
+  transition:all 0.25s;
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  position:relative;z-index:1;
+}
+
+.model-pill.active-c{
+  background:linear-gradient(135deg,rgba(155,135,245,0.2),rgba(155,135,245,0.08));
+  border:1px solid rgba(155,135,245,0.4);
+  color:#c4b8ff;
+  box-shadow:0 0 20px rgba(155,135,245,0.1);
+}
+.model-pill.active-g{
+  background:linear-gradient(135deg,rgba(66,133,244,0.2),rgba(66,133,244,0.08));
+  border:1px solid rgba(66,133,244,0.4);
+  color:#93b8ff;
+  box-shadow:0 0 20px rgba(66,133,244,0.1);
+}
+.model-pill.active-b{
+  background:linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03));
+  border:1px solid rgba(255,255,255,0.2);
+  color:var(--text);
+}
+
+/* ── API KEY PANEL ── */
+.key-panel{
+  background:rgba(255,255,255,0.03);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:1.5rem;
+  margin-bottom:1.5rem;
+  transition:all 0.3s;
+}
+
+.key-panel.glow-c{border-color:rgba(155,135,245,0.25);box-shadow:0 0 40px rgba(155,135,245,0.05)}
+.key-panel.glow-g{border-color:rgba(66,133,244,0.25);box-shadow:0 0 40px rgba(66,133,244,0.05)}
+
+.key-row-label{
+  display:flex;align-items:center;gap:8px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--text3);margin-bottom:8px;
+}
+
+.key-color-dot{width:6px;height:6px;border-radius:50%}
+.key-color-dot.c{background:var(--claude)}
+.key-color-dot.g{background:var(--gemini)}
+
+.key-input-row{display:flex;gap:8px}
+
+.key-input{
+  flex:1;background:rgba(255,255,255,0.04);
+  border:1px solid var(--border2);border-radius:12px;
+  padding:10px 14px;
+  font-family:'JetBrains Mono',monospace;font-size:12px;
+  color:var(--text);outline:none;
+  transition:all 0.2s;
+}
+.key-input:focus{border-color:rgba(155,135,245,0.5);box-shadow:0 0 0 3px rgba(155,135,245,0.08)}
+.key-input.gf:focus{border-color:rgba(66,133,244,0.5);box-shadow:0 0 0 3px rgba(66,133,244,0.08)}
+.key-input::placeholder{color:var(--text3)}
+
+.key-save{
+  padding:10px 16px;border-radius:12px;
+  border:1px solid rgba(155,135,245,0.3);
+  background:rgba(155,135,245,0.1);
+  color:#c4b8ff;font-size:12px;font-weight:500;
+  cursor:pointer;transition:all 0.2s;
+  font-family:'Inter',sans-serif;white-space:nowrap;
+}
+.key-save:hover{background:rgba(155,135,245,0.2);box-shadow:0 0 15px rgba(155,135,245,0.15)}
+.key-save.gs{border-color:rgba(66,133,244,0.3);background:rgba(66,133,244,0.1);color:#93b8ff}
+.key-save.gs:hover{background:rgba(66,133,244,0.2)}
+
+.key-hint{font-size:11px;color:var(--text3);margin-top:6px}
+.key-hint a{color:var(--claude);text-decoration:none;transition:opacity 0.2s}
+.key-hint a:hover{opacity:0.7}
+.key-hint a.g{color:var(--gemini)}
+
+.key-divider{height:1px;background:var(--border);margin:14px 0}
+
+/* ── EXAMPLE CHIPS ── */
+.example-label{
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--text3);margin-bottom:8px;
+}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.25rem}
+.chip{
+  font-size:12px;padding:6px 14px;
+  border-radius:30px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid var(--border2);
+  color:var(--text2);cursor:pointer;
+  transition:all 0.2s;font-weight:400;
+}
+.chip:hover{
+  border-color:rgba(155,135,245,0.5);
+  color:#c4b8ff;
+  background:rgba(155,135,245,0.08);
+  transform:translateY(-1px);
+}
+
+/* ── MAIN INPUT ── */
+.input-wrapper{position:relative;margin-bottom:1.25rem}
+
+.input-glow{
+  position:absolute;inset:-1px;
+  border-radius:21px;
+  background:linear-gradient(135deg,rgba(155,135,245,0),rgba(155,135,245,0));
+  transition:all 0.4s;
+  pointer-events:none;
+  z-index:0;
+}
+
+.input-wrapper:focus-within .input-glow{
+  background:linear-gradient(135deg,rgba(155,135,245,0.3),rgba(66,133,244,0.15));
+  filter:blur(8px);
+}
+
+.input-card{
+  position:relative;z-index:1;
+  background:rgba(255,255,255,0.04);
+  border:1px solid var(--border2);
+  border-radius:20px;
+  padding:1.25rem 1.5rem;
+  transition:border-color 0.3s;
+}
+
+.input-wrapper:focus-within .input-card{
+  border-color:rgba(155,135,245,0.4);
+}
+
+textarea{
+  width:100%;min-height:130px;
+  background:transparent;border:none;outline:none;
+  font-family:'Inter',sans-serif;font-size:15px;
+  line-height:1.7;color:var(--text);resize:none;
+}
+textarea::placeholder{color:var(--text3)}
+
+.input-footer{
+  display:flex;justify-content:space-between;align-items:center;
+  padding-top:12px;border-top:1px solid var(--border);margin-top:8px;
+}
+
+.char-count{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:var(--text3);
+}
+
+.analyze-btn{
+  display:flex;align-items:center;gap:10px;
+  padding:11px 24px;border-radius:14px;
+  border:none;color:#fff;
+  font-family:'Syne',sans-serif;font-size:15px;font-weight:700;
+  cursor:pointer;transition:all 0.25s;
+  position:relative;overflow:hidden;
+  letter-spacing:-0.3px;
+}
+
+.analyze-btn::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,#9b87f5,#6b52d4);
+  z-index:0;
+}
+
+.analyze-btn::after{
+  content:'';position:absolute;
+  top:-50%;left:-60%;
+  width:40%;height:200%;
+  background:rgba(255,255,255,0.15);
+  transform:skewX(-20deg);
+  transition:left 0.5s;
+  z-index:1;
+}
+
+.analyze-btn:hover::after{left:140%}
+.analyze-btn:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(155,135,245,0.4)}
+.analyze-btn:active{transform:translateY(0);box-shadow:none}
+.analyze-btn:disabled{opacity:0.4;cursor:not-allowed;transform:none;box-shadow:none}
+.analyze-btn:disabled::after{display:none}
+
+.analyze-btn span,.analyze-btn svg{position:relative;z-index:2}
+
+.analyze-btn.gb::before{background:linear-gradient(135deg,#4285f4,#2563eb)}
+.analyze-btn.gb:hover{box-shadow:0 8px 30px rgba(66,133,244,0.4)}
+.analyze-btn.bb::before{background:linear-gradient(135deg,#7b6cf5,#3b77e0)}
+
+/* ── LOADING ── */
+.loading-wrap{
+  padding:3rem;
+  display:flex;flex-direction:column;align-items:center;gap:20px;
+  animation:fadeUp 0.3s ease;
+}
+
+.loader-orb{
+  width:80px;height:80px;border-radius:50%;
+  background:rgba(155,135,245,0.1);
+  border:1px solid rgba(155,135,245,0.3);
+  display:flex;align-items:center;justify-content:center;
+  font-size:32px;
+  position:relative;
+  animation:orbPulse 1.5s ease-in-out infinite;
+}
+
+.loader-orb::before{
+  content:'';position:absolute;inset:-8px;
+  border-radius:50%;
+  border:1px solid rgba(155,135,245,0.2);
+  animation:orbRing 1.5s ease-in-out infinite;
+}
+
+.loader-orb::after{
+  content:'';position:absolute;inset:-16px;
+  border-radius:50%;
+  border:1px solid rgba(155,135,245,0.1);
+  animation:orbRing 1.5s ease-in-out infinite 0.2s;
+}
+
+@keyframes orbPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@keyframes orbRing{0%{transform:scale(1);opacity:1}100%{transform:scale(1.5);opacity:0}}
+
+.loading-text{
+  font-family:'JetBrains Mono',monospace;
+  font-size:13px;color:var(--text2);
+  animation:textFade 0.4s ease;
+}
+
+@keyframes textFade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── RESULT CARD ── */
+.result-wrap{animation:fadeUp 0.5s cubic-bezier(0.22,1,0.36,1);margin-bottom:1.5rem}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+.result-card{
+  background:rgba(255,255,255,0.03);
+  border:1px solid var(--border2);
+  border-radius:24px;
+  overflow:hidden;
+  position:relative;
+}
+
+/* colour accent top bar */
+.result-accent{
+  height:3px;
+  background:linear-gradient(90deg,var(--pos),transparent);
+  transition:background 0.5s;
+}
+.result-accent.neg{background:linear-gradient(90deg,var(--neg),transparent)}
+.result-accent.neu{background:linear-gradient(90deg,var(--neu),transparent)}
+
+/* big sentiment display */
+.sentiment-hero{
+  padding:2rem 2rem 1.5rem;
+  display:flex;align-items:center;justify-content:space-between;
+  position:relative;
+  overflow:hidden;
+}
+
+.sentiment-hero::before{
+  content:'';
+  position:absolute;right:-40px;top:-40px;
+  width:200px;height:200px;border-radius:50%;
+  background:var(--glow-pos);
+  filter:blur(60px);
+  transition:background 0.5s;
+  pointer-events:none;
+}
+
+.sentiment-hero.neg::before{background:var(--glow-neg)}
+.sentiment-hero.neu::before{background:var(--glow-neu)}
+
+.sentiment-left{}
+
+.sentiment-model-tag{
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;padding:3px 10px;border-radius:20px;
+  margin-bottom:10px;
+}
+.sentiment-model-tag.c{background:rgba(155,135,245,0.12);border:1px solid rgba(155,135,245,0.25);color:#c4b8ff}
+.sentiment-model-tag.g{background:rgba(66,133,244,0.12);border:1px solid rgba(66,133,244,0.25);color:#93b8ff}
+
+.big-label{
+  font-family:'Syne',sans-serif;
+  font-size:clamp(2.2rem,6vw,3.5rem);
+  font-weight:800;
+  letter-spacing:-2px;
+  line-height:1;
+  margin-bottom:6px;
+  transition:color 0.4s;
+}
+
+.label-sub{
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;letter-spacing:2px;text-transform:uppercase;
+  color:var(--text3);
+}
+
+.sentiment-right{display:flex;align-items:center;gap:20px}
+
+.big-emoji-wrap{
+  font-size:52px;
+  filter:drop-shadow(0 0 20px rgba(0,245,160,0.3));
+  transition:filter 0.4s;
+  animation:float 3s ease-in-out infinite;
+}
+
+.conf-block{text-align:right}
+.conf-num{
+  font-family:'Syne',sans-serif;
+  font-size:42px;font-weight:800;letter-spacing:-2px;
+  line-height:1;
+  transition:color 0.4s;
+}
+.conf-label{
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;letter-spacing:2px;text-transform:uppercase;
+  color:var(--text3);
+}
+
+/* ── SCORE BARS ── */
+.bars-section{
+  padding:1.5rem 2rem;
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+}
+
+.bar-item{margin-bottom:14px}
+.bar-item:last-child{margin-bottom:0}
+
+.bar-header{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:6px;
+}
+
+.bar-name{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;letter-spacing:1px;text-transform:uppercase;
+  color:var(--text2);
+}
+
+.bar-val{
+  font-family:'Syne',sans-serif;
+  font-size:13px;font-weight:700;
+}
+
+.bar-track{
+  height:6px;
+  background:rgba(255,255,255,0.06);
+  border-radius:10px;
+  overflow:hidden;
+  position:relative;
+}
+
+.bar-fill{
+  height:100%;border-radius:10px;
+  width:0;
+  transition:width 1.2s cubic-bezier(0.22,1,0.36,1);
+  position:relative;
+}
+
+.bar-fill::after{
+  content:'';
+  position:absolute;right:0;top:0;bottom:0;
+  width:20px;
+  background:inherit;
+  filter:blur(4px);
+  opacity:0.8;
+}
+
+.bar-fill.pos{background:linear-gradient(90deg,rgba(0,245,160,0.6),#00f5a0)}
+.bar-fill.neu{background:linear-gradient(90deg,rgba(139,137,160,0.6),#8b89a0)}
+.bar-fill.neg{background:linear-gradient(90deg,rgba(255,77,109,0.6),#ff4d6d)}
+
+/* ── ANALYSIS + TONES ── */
+.analysis-section{padding:1.5rem 2rem}
+
+.section-tag{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--text3);margin-bottom:10px;
+}
+
+.analysis-text{
+  font-size:14px;line-height:1.7;color:var(--text2);
+  margin-bottom:14px;
+}
+
+.tones{display:flex;flex-wrap:wrap;gap:8px}
+
+.tone{
+  font-size:12px;padding:5px 14px;
+  border-radius:30px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid var(--border2);
+  color:var(--text2);
+  font-family:'JetBrains Mono',monospace;
+  letter-spacing:0.5px;
+  transition:all 0.2s;
+}
+
+.tone:hover{
+  background:rgba(155,135,245,0.1);
+  border-color:rgba(155,135,245,0.3);
+  color:#c4b8ff;
+  transform:translateY(-2px);
+}
+
+/* ── COMPARE GRID ── */
+.compare-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:12px;
+  margin-bottom:1.5rem;
+  animation:fadeUp 0.5s cubic-bezier(0.22,1,0.36,1);
+}
+@media(max-width:520px){.compare-grid{grid-template-columns:1fr}}
+
+/* ── STATS ROW ── */
+.stats-row{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:10px;
+  margin-bottom:1.5rem;
+}
+
+.stat-card{
+  background:rgba(255,255,255,0.03);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:1rem;
+  text-align:center;
+  transition:all 0.2s;
+}
+
+.stat-card:hover{
+  background:rgba(255,255,255,0.05);
+  border-color:var(--border2);
+  transform:translateY(-2px);
+}
+
+.stat-num{
+  font-family:'Syne',sans-serif;
+  font-size:24px;font-weight:800;
+  margin-bottom:4px;
+}
+
+.stat-label{
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;letter-spacing:1.5px;
+  text-transform:uppercase;color:var(--text3);
+}
+
+/* ── HISTORY ── */
+.history-section{margin-top:0.5rem}
+
+.history-head{
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--text3);margin-bottom:10px;
+}
+
+.history-item{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 16px;
+  background:rgba(255,255,255,0.02);
+  border:1px solid var(--border);
+  border-radius:14px;margin-bottom:6px;
+  cursor:pointer;transition:all 0.2s;
+}
+.history-item:hover{
+  background:rgba(255,255,255,0.05);
+  border-color:var(--border2);
+  transform:translateX(4px);
+}
+.h-bar{width:3px;height:28px;border-radius:3px;flex-shrink:0}
+.h-bar.positive{background:var(--pos)}
+.h-bar.neutral{background:var(--neu)}
+.h-bar.negative{background:var(--neg)}
+
+.h-text{flex:1;font-size:13px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.h-meta{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:var(--text3);white-space:nowrap;
+}
+
+/* ── ERROR ── */
+.error-block{
+  padding:2rem;text-align:center;
+  color:#ff4d6d;font-size:14px;line-height:1.6;
+}
+
+/* ── FOOTER ── */
+footer{
+  margin-top:4rem;text-align:center;
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;letter-spacing:1px;
+  color:var(--text3);
+}
+footer a{color:var(--claude);text-decoration:none;transition:opacity 0.2s}
+footer a:hover{opacity:0.7}
+
+/* scrollbar */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(155,135,245,0.3);border-radius:4px}
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+
+<div class="page">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-eyebrow">
+      <div class="pulse-ring"></div>
+      AI · Sentiment Analysis · Real-time
+    </div>
+    <h1>SentiScan</h1>
+    <p class="hero-sub">Drop any text. Watch AI decode the emotion hidden inside it.</p>
+
+    <div class="orbs">
+      <div class="orb happy">😊</div>
+      <div class="orb angry">😤</div>
+      <div class="orb calm">😌</div>
+      <div class="orb sad">😢</div>
+      <div class="orb surprised">😲</div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card">
+      <div class="stat-num" style="color:var(--claude)" id="statAnalyses">0</div>
+      <div class="stat-label">analyses run</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:var(--pos)" id="statPositive">—</div>
+      <div class="stat-label">most common</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" style="color:var(--text2)" id="statAvgConf">—</div>
+      <div class="stat-label">avg confidence</div>
+    </div>
+  </div>
+
+  <!-- MODEL SWITCHER -->
+  <div class="model-switcher">
+    <button class="model-pill active-c" id="btn-claude" onclick="switchModel('claude')">🟣 Claude</button>
+    <button class="model-pill" id="btn-gemini" onclick="switchModel('gemini')">🔵 Gemini</button>
+    <button class="model-pill" id="btn-both" onclick="switchModel('both')">⚡ Compare Both</button>
+  </div>
+
+  <!-- API KEY PANEL -->
+  <div class="key-panel glow-c" id="keyPanel">
+    <div id="claudeKeySection">
+      <div class="key-row-label"><div class="key-color-dot c"></div>Anthropic API Key</div>
+      <div class="key-input-row">
+        <input class="key-input" type="password" id="claudeKeyInput" placeholder="sk-ant-api03-..."/>
+        <button class="key-save" onclick="saveKey('claude')">Save</button>
+      </div>
+      <p class="key-hint">Free key → <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a></p>
+    </div>
+    <div class="key-divider" id="keyDivider"></div>
+    <div id="geminiKeySection">
+      <div class="key-row-label"><div class="key-color-dot g"></div>Google Gemini API Key</div>
+      <div class="key-input-row">
+        <input class="key-input gf" type="password" id="geminiKeyInput" placeholder="AIzaSy..."/>
+        <button class="key-save gs" onclick="saveKey('gemini')">Save</button>
+      </div>
+      <p class="key-hint">Free key → <a href="https://aistudio.google.com/app/apikey" target="_blank" class="g">aistudio.google.com</a></p>
+    </div>
+  </div>
+
+  <!-- EXAMPLES -->
+  <div class="example-label">Try an example</div>
+  <div class="chips">
+    <span class="chip" onclick="setEx(0)">✨ glowing review</span>
+    <span class="chip" onclick="setEx(1)">😅 relatable monday</span>
+    <span class="chip" onclick="setEx(2)">🔥 angry complaint</span>
+    <span class="chip" onclick="setEx(3)">📊 neutral report</span>
+    <span class="chip" onclick="setEx(4)">💔 breakup text</span>
+  </div>
+
+  <!-- TEXT INPUT -->
+  <div class="input-wrapper">
+    <div class="input-glow"></div>
+    <div class="input-card">
+      <textarea id="textInput" placeholder="Paste a review, tweet, feedback, email, article… anything with emotion." oninput="updateCount()"></textarea>
+      <div class="input-footer">
+        <span class="char-count" id="charCount">0 chars</span>
+        <button class="analyze-btn" id="analyzeBtn" onclick="analyze()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+          <span id="btnText">Analyze</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="resultArea"></div>
+  <div id="historyArea"></div>
+
+  <footer>
+    SentiScan &nbsp;·&nbsp; AIML Mini Project &nbsp;·&nbsp;
+    <a href="https://console.anthropic.com" target="_blank">Claude</a> + <a href="https://aistudio.google.com" target="_blank">Gemini</a> &nbsp;·&nbsp;
+    <a href="https://github.com/" target="_blank">GitHub</a>
+  </footer>
+
+</div>
+
+<script>
+/* ── PARTICLE CANVAS ── */
+const canvas = document.getElementById('bgCanvas');
+const ctx = canvas.getContext('2d');
+let W, H, particles = [];
+
+function resizeCanvas(){
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+
+function Particle(){
+  this.x = Math.random()*W;
+  this.y = Math.random()*H;
+  this.r = Math.random()*1.5 + 0.3;
+  this.vx = (Math.random()-0.5)*0.3;
+  this.vy = (Math.random()-0.5)*0.3;
+  this.a = Math.random()*0.5 + 0.1;
+  this.color = Math.random()>0.5 ? '155,135,245' : '66,133,244';
+}
+
+function initParticles(){
+  particles = [];
+  for(let i=0;i<120;i++) particles.push(new Particle());
+}
+
+function drawParticles(){
+  ctx.clearRect(0,0,W,H);
+  particles.forEach(p=>{
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    ctx.fillStyle = `rgba(${p.color},${p.a})`;
+    ctx.fill();
+    p.x+=p.vx; p.y+=p.vy;
+    if(p.x<0||p.x>W) p.vx*=-1;
+    if(p.y<0||p.y>H) p.vy*=-1;
+  });
+  // draw connections
+  for(let i=0;i<particles.length;i++){
+    for(let j=i+1;j<particles.length;j++){
+      const dx=particles[i].x-particles[j].x;
+      const dy=particles[i].y-particles[j].y;
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      if(dist<100){
+        ctx.beginPath();
+        ctx.moveTo(particles[i].x,particles[i].y);
+        ctx.lineTo(particles[j].x,particles[j].y);
+        ctx.strokeStyle=`rgba(155,135,245,${0.06*(1-dist/100)})`;
+        ctx.lineWidth=0.5;
+        ctx.stroke();
+      }
+    }
+  }
+  requestAnimationFrame(drawParticles);
+}
+
+window.addEventListener('resize',()=>{resizeCanvas();initParticles()});
+resizeCanvas();initParticles();drawParticles();
+
+/* ── EXAMPLES ── */
+const EXAMPLES = [
+  "I absolutely love this product! It exceeded all my expectations and the quality is outstanding. The customer service team was also phenomenal — would definitely recommend to everyone!",
+  "Just got caught in the rain without an umbrella AGAIN. Classic Monday. At least my coffee is still warm lol. Could be worse I guess.",
+  "This is completely unacceptable. I have been waiting 3 weeks and still haven't received my order. Your customer service is terrible and I demand a full refund immediately!!!",
+  "The quarterly earnings report shows a 4.2% increase in revenue compared to the previous quarter. Operating expenses remained stable at $2.3 million.",
+  "I thought I was over it but seeing your name pop up on my phone still makes my heart drop. I miss you more than I should."
+];
+
+/* ── STATE ── */
+let currentModel = 'claude';
+const history = [];
+let analysisCount = 0, totalConf = 0, sentimentCounts = {Positive:0,Neutral:0,Negative:0};
+
+let claudeKey = localStorage.getItem('sentiscan_claude') || '';
+let geminiKey = localStorage.getItem('sentiscan_gemini') || '';
+if(claudeKey) document.getElementById('claudeKeyInput').value = claudeKey;
+if(geminiKey) document.getElementById('geminiKeyInput').value = geminiKey;
+
+/* ── MODEL SWITCH ── */
+function switchModel(m){
+  currentModel = m;
+  ['claude','gemini','both'].forEach(x=>{
+    const b = document.getElementById('btn-'+x);
+    b.className = 'model-pill' + (x===m ? (m==='gemini'?' active-g':m==='both'?' active-b':' active-c') : '');
+  });
+  const cs=document.getElementById('claudeKeySection');
+  const gs=document.getElementById('geminiKeySection');
+  const div=document.getElementById('keyDivider');
+  cs.style.display = m==='gemini'?'none':'';
+  gs.style.display = m==='claude'?'none':'';
+  div.style.display = m==='both'?'':'none';
+  document.getElementById('keyPanel').className = 'key-panel' + (m==='gemini'?' glow-g':' glow-c');
+  const btn = document.getElementById('analyzeBtn');
+  btn.className = 'analyze-btn' + (m==='gemini'?' gb':m==='both'?' bb':'');
+  document.getElementById('btnText').textContent = m==='both'?'Compare Both':'Analyze';
+}
+
+function saveKey(p){
+  const input=document.getElementById(p+'KeyInput');
+  const val=input.value.trim();
+  if(!val) return;
+  if(p==='claude') claudeKey=val; else geminiKey=val;
+  localStorage.setItem('sentiscan_'+p, val);
+  input.style.borderColor='rgba(0,245,160,0.6)';
+  setTimeout(()=>input.style.borderColor='',1500);
+}
+
+function setEx(i){ document.getElementById('textInput').value=EXAMPLES[i]; updateCount(); }
+
+function updateCount(){
+  const n=document.getElementById('textInput').value.length;
+  document.getElementById('charCount').textContent = n+' chars';
+}
+
+const emojiFor = l=>({Positive:'😊',Negative:'😤',Neutral:'😐'}[l]||'🤔');
+const colorFor = l=>({Positive:'var(--pos)',Negative:'var(--neg)',Neutral:'var(--neu)'}[l]||'var(--neu)');
+
+const PROMPT = text=>`You are a precise sentiment analysis engine for an AIML student project.
+Analyze the sentiment of this text and respond ONLY with a JSON object. No markdown, no explanation, no preamble.
+Text: "${text}"
+Respond with exactly:
+{"label":"Positive" or "Negative" or "Neutral","confidence":0-100,"positive_score":0-100,"neutral_score":0-100,"negative_score":0-100,"summary":"one vivid sentence","tones":["2-4 evocative tone words"]}
+The three scores must add up to 100.`;
+
+async function callClaude(text){
+  const key=document.getElementById('claudeKeyInput').value.trim()||claudeKey;
+  if(!key) throw new Error('Anthropic API key missing. Enter it above.');
+  const res=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,messages:[{role:'user',content:PROMPT(text)}]})
+  });
+  const data=await res.json();
+  if(data.error) throw new Error('Claude: '+data.error.message);
+  return JSON.parse(data.content.map(b=>b.text||'').join('').replace(/```json|```/g,'').trim());
+}
+
+async function callGemini(text){
+  const key=document.getElementById('geminiKeyInput').value.trim()||geminiKey;
+  if(!key) throw new Error('Gemini API key missing. Enter it above.');
+  const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({contents:[{parts:[{text:PROMPT(text)}]}],generationConfig:{temperature:0.1,maxOutputTokens:500}})
+  });
+  const data=await res.json();
+  if(data.error) throw new Error('Gemini: '+data.error.message);
+  const raw=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+  return JSON.parse(raw.replace(/```json|```/g,'').trim());
+}
+
+/* ── LOADING MESSAGES ── */
+const loadMsgs=['Reading the vibes...','Scanning for emotion...','Decoding the feeling...','Running sentiment model...','Almost there...'];
+let msgIdx=0, msgTimer=null;
+
+function startLoading(){
+  document.getElementById('analyzeBtn').disabled=true;
+  msgIdx=0;
+  const cls = currentModel==='gemini'?'🔵':'🟣';
+  function render(){
+    document.getElementById('resultArea').innerHTML=`
+      <div class="loading-wrap">
+        <div class="loader-orb">${cls}</div>
+        <div class="loading-text" id="loadMsg">${loadMsgs[msgIdx]}</div>
+      </div>`;
+  }
+  render();
+  msgTimer=setInterval(()=>{
+    msgIdx=(msgIdx+1)%loadMsgs.length;
+    const el=document.getElementById('loadMsg');
+    if(el) el.textContent=loadMsgs[msgIdx];
+  },1200);
+}
+
+function stopLoading(){
+  clearInterval(msgTimer);
+  document.getElementById('analyzeBtn').disabled=false;
+}
+
+/* ── ANALYZE ── */
+async function analyze(){
+  const text=document.getElementById('textInput').value.trim();
+  if(!text) return;
+  startLoading();
+  try{
+    if(currentModel==='both'){
+      const [cr,gr]=await Promise.allSettled([callClaude(text),callGemini(text)]);
+      showComparison(cr,gr,text);
+    } else if(currentModel==='claude'){
+      const r=await callClaude(text);
+      showSingle(r,'claude'); addHistory(r,text,'Claude'); updateStats(r);
+    } else {
+      const r=await callGemini(text);
+      showSingle(r,'gemini'); addHistory(r,text,'Gemini'); updateStats(r);
+    }
+  } catch(e){
+    document.getElementById('resultArea').innerHTML=`
+      <div class="result-card" style="margin-bottom:1.5rem">
+        <div class="result-accent neg"></div>
+        <div class="error-block">⚠️ ${e.message}</div>
+      </div>`;
+  }
+  stopLoading();
+}
+
+/* ── UPDATE STATS ── */
+function updateStats(r){
+  analysisCount++;
+  totalConf+=r.confidence;
+  sentimentCounts[r.label]=(sentimentCounts[r.label]||0)+1;
+  const maxLabel=Object.entries(sentimentCounts).sort((a,b)=>b[1]-a[1])[0][0];
+  const avgConf=Math.round(totalConf/analysisCount);
+  animateNum('statAnalyses',analysisCount);
+  document.getElementById('statPositive').textContent=maxLabel;
+  document.getElementById('statPositive').style.color=colorFor(maxLabel).replace('var(','').replace(')','');
+  document.getElementById('statPositive').style.color=colorFor(maxLabel);
+  document.getElementById('statAvgConf').textContent=avgConf+'%';
+}
+
+function animateNum(id, target){
+  const el=document.getElementById(id);
+  const start=parseInt(el.textContent)||0;
+  const dur=600;const step=16;
+  let t=0;
+  const iv=setInterval(()=>{
+    t+=step;
+    const v=Math.round(start+(target-start)*(t/dur));
+    el.textContent=Math.min(v,target);
+    if(t>=dur){el.textContent=target;clearInterval(iv);}
+  },step);
+}
+
+/* ── CARD HTML ── */
+function cardHTML(r, model, pfx){
+  const c=colorFor(r.label);
+  const emoji=emojiFor(r.label);
+  const lbl=r.label.toLowerCase();
+  const mName=model==='claude'?'🟣 Claude':'🔵 Gemini';
+  const accentCls=lbl==='positive'?'':'lbl==="negative"?"neg":"neu"';
+  return `
+    <div class="result-card">
+      <div class="result-accent ${lbl==='positive'?'':lbl==='negative'?'neg':'neu'}"></div>
+      <div class="sentiment-hero ${lbl==='positive'?'':lbl==='negative'?'neg':'neu'}">
+        <div class="sentiment-left">
+          <div class="sentiment-model-tag ${model[0]}">${mName}</div>
+          <div class="big-label" style="color:${c}">${r.label}</div>
+          <div class="label-sub">sentiment detected</div>
+        </div>
+        <div class="sentiment-right">
+          <div class="conf-block">
+            <div class="conf-num" style="color:${c}">${Math.round(r.confidence)}%</div>
+            <div class="conf-label">confidence</div>
+          </div>
+          <div class="big-emoji-wrap" style="filter:drop-shadow(0 0 20px ${c.replace('var(--pos)','rgba(0,245,160,0.4)').replace('var(--neg)','rgba(255,77,109,0.4)').replace('var(--neu)','rgba(139,137,160,0.3)')})">${emoji}</div>
+        </div>
+      </div>
+      <div class="bars-section">
+        <div class="bar-item">
+          <div class="bar-header"><span class="bar-name">Positive</span><span class="bar-val" style="color:var(--pos)">${Math.round(r.positive_score)}%</span></div>
+          <div class="bar-track"><div class="bar-fill pos" id="${pfx}-p" style="width:0%"></div></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-header"><span class="bar-name">Neutral</span><span class="bar-val" style="color:var(--neu)">${Math.round(r.neutral_score)}%</span></div>
+          <div class="bar-track"><div class="bar-fill neu" id="${pfx}-n" style="width:0%"></div></div>
+        </div>
+        <div class="bar-item">
+          <div class="bar-header"><span class="bar-name">Negative</span><span class="bar-val" style="color:var(--neg)">${Math.round(r.negative_score)}%</span></div>
+          <div class="bar-track"><div class="bar-fill neg" id="${pfx}-g" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="analysis-section">
+        <div class="section-tag">✦ AI Insight</div>
+        <div class="analysis-text">${r.summary}</div>
+        <div class="tones">${(r.tones||[]).map(t=>`<span class="tone">${t}</span>`).join('')}</div>
+      </div>
+    </div>`;
+}
+
+function animBars(pfx,r){
+  requestAnimationFrame(()=>setTimeout(()=>{
+    const p=document.getElementById(pfx+'-p');
+    const n=document.getElementById(pfx+'-n');
+    const g=document.getElementById(pfx+'-g');
+    if(p) p.style.width=Math.round(r.positive_score)+'%';
+    if(n) n.style.width=Math.round(r.neutral_score)+'%';
+    if(g) g.style.width=Math.round(r.negative_score)+'%';
+  },60));
+}
+
+function showSingle(r,model){
+  document.getElementById('resultArea').innerHTML=`<div class="result-wrap">${cardHTML(r,model,'b')}</div>`;
+  animBars('b',r);
+}
+
+function showComparison(cr,gr){
+  let html='<div class="compare-grid">';
+  html+=cr.status==='fulfilled'?cardHTML(cr.value,'claude','bc'):`<div class="result-card"><div class="result-accent neg"></div><div class="error-block">Claude error: ${cr.reason?.message}</div></div>`;
+  html+=gr.status==='fulfilled'?cardHTML(gr.value,'gemini','bg'):`<div class="result-card"><div class="result-accent neg"></div><div class="error-block">Gemini error: ${gr.reason?.message}</div></div>`;
+  html+='</div>';
+  document.getElementById('resultArea').innerHTML=html;
+  if(cr.status==='fulfilled'){animBars('bc',cr.value);updateStats(cr.value);}
+  if(gr.status==='fulfilled') animBars('bg',gr.value);
+}
+
+function addHistory(r,text,modelName){
+  history.unshift({label:r.label.toLowerCase(),displayLabel:r.label,confidence:r.confidence,text,modelName});
+  if(history.length>6) history.pop();
+  renderHistory();
+}
+
+function renderHistory(){
+  if(history.length<2) return;
+  document.getElementById('historyArea').innerHTML=`
+    <div class="history-section">
+      <div class="history-head">// recent analyses</div>
+      ${history.map((h,i)=>`
+        <div class="history-item" onclick="reloadHistory(${i})">
+          <div class="h-bar ${h.label}"></div>
+          <div class="h-text">${h.text}</div>
+          <div class="h-meta">${h.modelName} · ${h.displayLabel} · ${Math.round(h.confidence)}%</div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function reloadHistory(i){
+  document.getElementById('textInput').value=history[i].text;
+  updateCount();
+}
+
+switchModel('claude');
+</script>
+</body>
+</html>
